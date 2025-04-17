@@ -2,17 +2,18 @@ from components.music_generator import MusicGenerator
 from components.lyrics_generator import LyricsGenerator
 from components.vocals_generator import VocalsGenerator
 from components.audio_sync import AudioSync
+import torch
 
 from utils.file_utils import get_binary_file_download
 import streamlit as st
 
 st.set_page_config(page_title="MusicGen", page_icon="🎵")
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 def main():
     
     # Initialize objects
     music_gen = MusicGenerator(model_name="facebook/musicgen-small")
-    lyrics_gen = LyricsGenerator(model_name="gpt2")
+    lyrics_gen = LyricsGenerator(model_name="gpt-4o", device=device)
     vocals_gen = VocalsGenerator()
     audio_sync = AudioSync()
 
@@ -51,7 +52,7 @@ def main():
             vocals_gen.generate_vocals(line, audio_filename)
 
         # Step 5: Sync vocals with beats 
-        final_audio = audio_sync.sync_vocals_with_beats(audio_file_path, "output", lyrics_to_beats)
+        final_audio = audio_sync.sync_vocals_with_beats(audio_file_path, lyrics_to_beats, "output")
 
         ## Export the combined audio
         final_audio.export("output/final_track.mp3", format="mp3")

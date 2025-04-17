@@ -32,7 +32,7 @@ class AudioSync:
 
         return lyrics_to_beats
     
-    def sync_vocals_with_beats(beat_audio_path, vocal_files_dir, lyrics_to_beats):
+    def sync_vocals_with_beats(self, beat_audio_path, lyrics_to_beats, vocal_files_dir):
 
         if not os.path.exists(beat_audio_path):
             print(f"File not found: {beat_audio_path}")
