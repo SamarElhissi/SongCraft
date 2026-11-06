@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 from songcraft.config import Settings
+from songcraft.pipeline.ace_song import AceStepGenerator
 from songcraft.pipeline.analyze import LibrosaBeatAnalyzer
 from songcraft.pipeline.fakes import (
     FakeBeatAnalyzer,
@@ -30,6 +31,7 @@ def build_pipeline(settings: Settings) -> Pipeline:
             settings.music_generator,
             {
                 "fake": FakeMusicGenerator,
+                "acestep": lambda: AceStepGenerator(settings),
                 "musicgen": lambda: MusicGenGenerator(settings.music_model, settings.device),
             },
             "music generator",

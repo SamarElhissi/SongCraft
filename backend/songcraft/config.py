@@ -21,7 +21,10 @@ class Settings(BaseSettings):
     max_duration_seconds: float = 30
     # Comma-separated so a single environment variable can list origins.
     cors_origins: str = "http://localhost:5173"
-    music_generator: str = "musicgen"
+    music_generator: str = "acestep"
+    # Empty means <repo>/.venv-acestep/Scripts/python.exe. ACE-Step has its own torch.
+    acestep_python: str = ""
+    acestep_root: Path = Path("./ace-step")
     lyrics_generator: str = "instruct"
     vocal_synthesizer: str = "melody"
     mixer: str = "pydub"

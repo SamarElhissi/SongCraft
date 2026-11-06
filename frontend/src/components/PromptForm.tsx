@@ -9,7 +9,7 @@ const MAX_PROMPT = 500;
 export function PromptForm() {
   const queryClient = useQueryClient();
   const [prompt, setPrompt] = useState("");
-  const [duration, setDuration] = useState(8);
+  const [duration, setDuration] = useState(30);
   const create = useMutation({
     mutationFn: createSong,
     onSuccess: (song) => {
@@ -49,7 +49,7 @@ export function PromptForm() {
       <input
         id="duration"
         type="range"
-        min={5}
+        min={10}
         max={30}
         step={1}
         value={duration}

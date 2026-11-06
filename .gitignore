@@ -50,7 +50,11 @@ frontend/dist/
 
 # virtualenv
 .venv
+.venv-acestep/
 venv/
+
+# ACE-Step checkout and its downloaded weights
+/ace-step/
 ENV/
 
 # egs with manifest files

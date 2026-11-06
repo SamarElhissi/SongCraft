@@ -11,6 +11,7 @@ from songcraft.clock import utcnow
 from songcraft.config import Settings
 from songcraft.models import STEP_ORDER, Song, SongStatus
 from songcraft.paths import final_path, instrumental_path, song_dir, vocal_path
+from songcraft.pipeline.ace_song import AceStepGenerator
 from songcraft.pipeline.beats import LinePlacement, map_lines_to_beats
 from songcraft.pipeline.interfaces import Pipeline
 from songcraft.pipeline.melody import build_line_melody, estimate_key, syllables_per_line, target_line_count
@@ -49,6 +50,9 @@ def run_song(song_id: str, session: Session, pipeline: Pipeline, settings: Setti
     final = final_path(settings, song.id)
 
     try:
+        if isinstance(pipeline.music, AceStepGenerator):
+            _run_acestep(session, song, pipeline, final)
+            return
         _run_step(
             session,
             song,
@@ -102,6 +106,20 @@ def run_song(song_id: str, session: Session, pipeline: Pipeline, settings: Setti
     except Exception:
         logger.exception("song_failed job_id=%s", song_id)
         _mark_failed(session, song, "Song generation failed")
+
+
+def _run_acestep(session: Session, song: Song, pipeline: Pipeline, final: Path) -> None:
+    def generate() -> None:
+        outcome = pipeline.music.generate_song(song.prompt, song.duration_seconds, final)
+        song.lyrics = str(outcome.get("lyrics") or "")
+        bpm = outcome.get("bpm")
+        song.tempo_bpm = float(bpm) if isinstance(bpm, (int, float)) else None
+        duration = outcome.get("duration")
+        if isinstance(duration, (int, float)):
+            song.duration_seconds = float(duration)
+
+    _run_step(session, song, SongStatus.generating_music, generate)
+    _set_status(session, song, SongStatus.completed)
 
 
 def _run_step(
