@@ -1,0 +1,161 @@
+from pathlib import Path
+
+import pytest
+
+from songcraft.device import resolve_device
+from songcraft.pipeline.analyze import LibrosaBeatAnalyzer
+from songcraft.pipeline.beats import LinePlacement
+from songcraft.pipeline.factory import build_pipeline
+from songcraft.pipeline.fakes import write_silent_wav
+from songcraft.pipeline.lyrics import Gpt2LyricsGenerator
+from songcraft.pipeline.mixer import PydubMixer
+from songcraft.pipeline.music import MusicGenGenerator
+from songcraft.pipeline.vocals import GttsVocalSynthesizer
+
+
+class _Probe:
+    def __init__(self, cuda: bool, mps: bool) -> None:
+        self.cuda = type("Cuda", (), {"is_available": staticmethod(lambda: cuda)})()
+        self.backends = type("Backends", (), {})()
+        self.backends.mps = type("Mps", (), {"is_available": staticmethod(lambda: mps)})()
+
+
+def test_auto_device_order(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("songcraft.device._torch", lambda: _Probe(cuda=True, mps=True))
+    assert resolve_device("auto") == "cuda"
+    monkeypatch.setattr("songcraft.device._torch", lambda: _Probe(cuda=False, mps=True))
+    assert resolve_device("auto") == "mps"
+    monkeypatch.setattr("songcraft.device._torch", lambda: _Probe(cuda=False, mps=False))
+    assert resolve_device("auto") == "cpu"
+
+
+def test_explicit_device_does_not_import_torch(monkeypatch: pytest.MonkeyPatch) -> None:
+    def boom():
+        raise AssertionError("torch should stay unloaded")
+
+    monkeypatch.setattr("songcraft.device._torch", boom)
+    assert resolve_device("cpu") == "cpu"
+    assert resolve_device("cuda") == "cuda"
+
+
+def test_real_pipeline_builds_without_loading_weights(settings_factory, monkeypatch) -> None:
+    def boom(*_args, **_kwargs):
+        raise AssertionError("weights loaded at startup")
+
+    monkeypatch.setattr("songcraft.pipeline.music._load_musicgen", boom)
+    monkeypatch.setattr("songcraft.pipeline.lyrics._load_text_pipeline", boom)
+    settings = settings_factory(
+        music_generator="musicgen",
+        lyrics_generator="gpt2",
+        vocal_synthesizer="gtts",
+        mixer="pydub",
+        beat_analyzer="librosa",
+    )
+    pipeline = build_pipeline(settings)
+    assert isinstance(pipeline.music, MusicGenGenerator)
+    assert pipeline.music._model is None
+    assert isinstance(pipeline.lyrics, Gpt2LyricsGenerator)
+    assert pipeline.lyrics._pipeline is None
+
+
+def test_musicgen_loads_once_and_writes_wav(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    torch = pytest.importorskip("torch")
+    pytest.importorskip("torchaudio")
+    loads = {"count": 0}
+
+    class FakeModel:
+        sample_rate = 8000
+
+        def set_generation_params(self, **kwargs) -> None:
+            self.params = kwargs
+
+        def generate(self, descriptions, progress=False, return_tokens=False):
+            assert descriptions == ["rain"]
+            assert self.params["duration"] == 5
+            assert progress is False
+            assert return_tokens is False
+            return torch.zeros(1, 1, 800)
+
+    def load(name: str, device: str) -> FakeModel:
+        loads["count"] += 1
+        assert name == "facebook/musicgen-small"
+        assert device == "cpu"
+        return FakeModel()
+
+    monkeypatch.setattr("songcraft.pipeline.music._load_musicgen", load)
+    generator = MusicGenGenerator("facebook/musicgen-small", "cpu")
+    destination = tmp_path / "songs" / "instrumental.wav"
+    generator.generate("rain", 5, destination)
+    generator.generate("rain", 5, destination)
+    assert loads["count"] == 1
+    assert destination.stat().st_size > 44
+
+
+def test_gpt2_reuses_one_pipeline(monkeypatch: pytest.MonkeyPatch) -> None:
+    loads = {"count": 0}
+
+    class Pipe:
+        class tokenizer:
+            eos_token_id = 0
+
+        def __call__(self, prompt: str, **kwargs):
+            assert kwargs["max_new_tokens"] == 120
+            assert kwargs["do_sample"] is True
+            assert kwargs["pad_token_id"] == 0
+            return [{"generated_text": f"  {prompt}. la la la  "}]
+
+    def load(model_name: str, device: str) -> Pipe:
+        loads["count"] += 1
+        assert model_name == "gpt2"
+        assert device == "cpu"
+        return Pipe()
+
+    monkeypatch.setattr("songcraft.pipeline.lyrics._load_text_pipeline", load)
+    generator = Gpt2LyricsGenerator("gpt2", "cpu")
+    assert generator.generate("rain") == "rain. la la la"
+    generator.generate("rain")
+    assert loads["count"] == 1
+
+
+def test_gtts_is_asked_to_save_mp3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, object] = {}
+
+    def save(text: str, output_path: Path) -> None:
+        seen["text"] = text
+        seen["path"] = output_path
+        output_path.write_bytes(b"ID3")
+
+    monkeypatch.setattr("songcraft.pipeline.vocals._save_speech", save)
+    destination = tmp_path / "vocals" / "line_0.mp3"
+    GttsVocalSynthesizer().synthesize("hello there", destination)
+    assert seen == {"text": "hello there", "path": destination}
+    assert destination.suffix == ".mp3"
+    assert destination.read_bytes().startswith(b"ID3")
+
+
+def test_librosa_silence_has_no_tempo(tmp_path: Path) -> None:
+    pytest.importorskip("librosa")
+    audio = tmp_path / "silent.wav"
+    write_silent_wav(audio, 1.0)
+    tempo, beats = LibrosaBeatAnalyzer().analyze(audio, 1.0)
+    assert tempo is None
+    assert beats == []
+
+
+def test_pydub_mixer_writes_mp3(tmp_path: Path) -> None:
+    pytest.importorskip("pydub")
+    from pydub.generators import Sine
+
+    instrumental = tmp_path / "instrumental.wav"
+    vocal = tmp_path / "line_0.wav"
+    final = tmp_path / "final.mp3"
+    write_silent_wav(instrumental, 1.0)
+    Sine(440).to_audio_segment(duration=300).export(vocal, format="wav")
+    PydubMixer().mix(
+        instrumental,
+        [LinePlacement("la", 0.1, 0.4)],
+        [vocal],
+        final,
+    )
+    assert final.is_file()
+    assert final.stat().st_size > 0

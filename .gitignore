@@ -41,6 +41,13 @@ wheels/
 .env
 .envrc
 
+# generated songs and the local database
+/data/
+
+# frontend build output
+node_modules/
+frontend/dist/
+
 # virtualenv
 .venv
 venv/
