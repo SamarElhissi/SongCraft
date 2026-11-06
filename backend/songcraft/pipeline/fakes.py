@@ -2,6 +2,7 @@ import wave
 from pathlib import Path
 
 from songcraft.pipeline.beats import LinePlacement
+from songcraft.pipeline.melody import Note
 
 # Placeholder audio stands in for the real models until phase 2.
 _MAX_PLACEHOLDER_SECONDS = 1.0
@@ -24,12 +25,12 @@ class FakeMusicGenerator:
 
 
 class FakeLyricsGenerator:
-    def generate(self, prompt: str) -> str:
+    def generate(self, prompt: str, line_count: int = 2, syllables: int = 6) -> str:
         return f"Walking home in the rain. Thinking about {prompt}."
 
 
 class FakeVocalSynthesizer:
-    def synthesize(self, line: str, output_path: Path) -> None:
+    def synthesize(self, line: str, notes: list[Note], output_path: Path) -> None:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_bytes(b"ID3" + line.encode("utf-8"))
 

@@ -9,10 +9,10 @@ from songcraft.pipeline.fakes import (
     FakeMusicGenerator,
     FakeVocalSynthesizer,
 )
-from songcraft.pipeline.lyrics import Gpt2LyricsGenerator
+from songcraft.pipeline.lyrics import Gpt2LyricsGenerator, InstructLyricsGenerator
 from songcraft.pipeline.mixer import PydubMixer
 from songcraft.pipeline.music import MusicGenGenerator
-from songcraft.pipeline.vocals import GttsVocalSynthesizer
+from songcraft.pipeline.vocals import GttsVocalSynthesizer, MelodicVocalSynthesizer
 from songcraft.pipeline.interfaces import (
     BeatAnalyzer,
     LyricsGenerator,
@@ -38,13 +38,18 @@ def build_pipeline(settings: Settings) -> Pipeline:
             settings.lyrics_generator,
             {
                 "fake": FakeLyricsGenerator,
+                "instruct": lambda: InstructLyricsGenerator(settings.lyrics_model, settings.device),
                 "gpt2": lambda: Gpt2LyricsGenerator(settings.lyrics_model, settings.device),
             },
             "lyrics generator",
         ),
         vocals=_select(
             settings.vocal_synthesizer,
-            {"fake": FakeVocalSynthesizer, "gtts": GttsVocalSynthesizer},
+            {
+                "fake": FakeVocalSynthesizer,
+                "melody": MelodicVocalSynthesizer,
+                "gtts": GttsVocalSynthesizer,
+            },
             "vocal synthesizer",
         ),
         mixer=_select(

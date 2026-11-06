@@ -13,7 +13,8 @@ from songcraft.models import STEP_ORDER, Song, SongStatus
 from songcraft.paths import final_path, instrumental_path, song_dir, vocal_path
 from songcraft.pipeline.beats import LinePlacement, map_lines_to_beats
 from songcraft.pipeline.interfaces import Pipeline
-from songcraft.pipeline.text import split_lyrics_into_lines
+from songcraft.pipeline.melody import build_line_melody, estimate_key, syllables_per_line, target_line_count
+from songcraft.pipeline.text import parse_lyric_lines, split_lyrics_into_lines
 
 logger = logging.getLogger("songcraft.pipeline")
 
@@ -63,18 +64,26 @@ def run_song(song_id: str, session: Session, pipeline: Pipeline, settings: Setti
         _tempo, beat_times = _run_step(session, song, SongStatus.analyzing_beats, analyze)
 
         def write_lyrics() -> list[LinePlacement]:
-            text = pipeline.lyrics.generate(song.prompt)
-            song.lyrics = text
-            lines = split_lyrics_into_lines(text or "")
+            count = target_line_count(song.duration_seconds)
+            syllables = syllables_per_line(song.duration_seconds, count)
+            text = pipeline.lyrics.generate(song.prompt, count, syllables)
+            lines = parse_lyric_lines(text or "")
+            # A single paragraph is still the old prose shape, so split that on punctuation.
+            if len(lines) <= 1:
+                lines = split_lyrics_into_lines(text or "")
+            lines = lines[:count]
+            song.lyrics = "\n".join(lines)
             return map_lines_to_beats(lines, beat_times, song.duration_seconds)
 
         placements = _run_step(session, song, SongStatus.writing_lyrics, write_lyrics)
 
         def synthesize() -> list[Path]:
+            key = estimate_key(instrumental)
             paths: list[Path] = []
             for index, placement in enumerate(placements):
                 path = vocal_path(settings, song.id, index)
-                pipeline.vocals.synthesize(placement.line, path)
+                notes = build_line_melody(placement.line, placement.end - placement.start, key)
+                pipeline.vocals.synthesize(placement.line, notes, path)
                 paths.append(path)
             return paths
 

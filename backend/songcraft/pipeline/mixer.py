@@ -24,18 +24,18 @@ class PydubMixer:
             if not vocal_path.is_file():
                 continue
             start_ms = int(placement.start * 1000)
-            duration_ms = int(placement.end * 1000) - start_ms
-            if duration_ms <= 0:
+            if start_ms >= len(beat):
                 continue
-            vocal = AudioSegment.from_file(vocal_path)[:duration_ms]
-            if len(vocal) == 0:
-                continue
-            fade_ms = min(200, duration_ms // 4)
+            # The clip is already timed to its notes. Only cut it if it would run past the song.
+            vocal = AudioSegment.from_file(vocal_path)
+            fade_ms = min(20, len(vocal) // 10)
             if fade_ms > 0:
                 vocal = vocal.fade_in(fade_ms).fade_out(fade_ms)
-            vocal = vocal - 3
-            if len(vocal) < duration_ms:
-                vocal += AudioSegment.silent(duration=duration_ms - len(vocal))
+            room = len(beat) - start_ms
+            if len(vocal) > room:
+                vocal = vocal[:room]
+            if len(vocal) == 0:
+                continue
             vocals = vocals.overlay(vocal, position=start_ms)
         beat.overlay(vocals).export(output_path, format="mp3")
 

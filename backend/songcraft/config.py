@@ -15,22 +15,21 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./data/songcraft.db"
     data_dir: Path = Path("./data")
-    # Read by the model loaders added in phase 2. auto, cuda, mps, or cpu.
-    # auto, cuda, mps, or cpu. Passed through to MusicGen and GPT-2.
+    # auto, cuda, mps, or cpu. Passed through to MusicGen and the lyrics model.
     device: str = "auto"
     min_duration_seconds: float = 5
     max_duration_seconds: float = 30
     # Comma-separated so a single environment variable can list origins.
     cors_origins: str = "http://localhost:5173"
     music_generator: str = "musicgen"
-    lyrics_generator: str = "gpt2"
-    vocal_synthesizer: str = "gtts"
+    lyrics_generator: str = "instruct"
+    vocal_synthesizer: str = "melody"
     mixer: str = "pydub"
     # Beat tracking is not one of the four model slots; the runner needs times
     # before it can place lyric lines.
     beat_analyzer: str = "librosa"
     music_model: str = "facebook/musicgen-small"
-    lyrics_model: str = "gpt2"
+    lyrics_model: str = "Qwen/Qwen2.5-1.5B-Instruct"
     job_queue: str = "inprocess"
 
     @model_validator(mode="after")

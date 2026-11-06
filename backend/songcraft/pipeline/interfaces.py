@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Protocol
 
 from songcraft.pipeline.beats import LinePlacement
+from songcraft.pipeline.melody import Note
 
 
 class MusicGenerator(Protocol):
@@ -11,13 +12,13 @@ class MusicGenerator(Protocol):
 
 
 class LyricsGenerator(Protocol):
-    def generate(self, prompt: str) -> str:
-        """Return lyric text for the prompt."""
+    def generate(self, prompt: str, line_count: int = 2, syllables: int = 6) -> str:
+        """Return lyric text. line_count is how many lines the song has room for."""
 
 
 class VocalSynthesizer(Protocol):
-    def synthesize(self, line: str, output_path: Path) -> None:
-        """Write one line. Callers pass an .mp3 path because gTTS emits MP3 bytes."""
+    def synthesize(self, line: str, notes: list[Note], output_path: Path) -> None:
+        """Write one line, following notes when the synthesizer can sing them."""
 
 
 class Mixer(Protocol):

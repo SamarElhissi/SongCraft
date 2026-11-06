@@ -82,7 +82,7 @@ def test_empty_lyrics_still_finish(settings_factory) -> None:
     pipeline = build_pipeline(settings)
 
     class EmptyLyrics:
-        def generate(self, prompt: str) -> str:
+        def generate(self, prompt: str, line_count: int = 2, syllables: int = 6) -> str:
             return ""
 
     pipeline.lyrics = EmptyLyrics()
@@ -149,7 +149,7 @@ def test_vocal_failure_keeps_earlier_timings(settings_factory) -> None:
     pipeline = build_pipeline(settings)
 
     class ExplodingVocals:
-        def synthesize(self, line: str, output_path: Path) -> None:
+        def synthesize(self, line: str, notes: list, output_path: Path) -> None:
             raise RuntimeError("tts down")
 
     pipeline.vocals = ExplodingVocals()
