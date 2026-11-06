@@ -1,13 +1,14 @@
 from pydub import AudioSegment
 import librosa
 import os
+import numpy as np
 
 class AudioSync:
     def __init__(self):
         self.model = None  # Cache the model for reuse
 
     def map_lyrics_to_beats(self, lyrics_lines, audio_file_path):
-        y, sr = librosa.load(audio_file_path, sr=None)  # y is the audio time series, sr is the sample rate
+        y, sr = librosa.load(audio_file_path, sr=None)
 
         # Get the tempo (beats per minute) and the beat frames
         tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
@@ -15,25 +16,31 @@ class AudioSync:
         # Convert beat frames to time (seconds)
         beat_times = librosa.frames_to_time(beat_frames, sr=sr)
 
-        # Ensure we have enough beats for the lyrics
-        num_beats = len(beat_times)
-        num_lines = len(lyrics_lines)
+        # Calculate the total duration of the song
+        total_duration = len(y) / sr
 
-        # If there are more beats than lyrics lines, we can repeat the lyrics or adjust it
-        # If there are more lyrics than beats, we might need to stretch the lyrics across beats
-        beats_per_lyric = num_beats // num_lines
+        # Calculate average duration per line based on number of words
+        total_words = sum(len(line.split()) for line in lyrics_lines)
+        avg_duration_per_word = total_duration / total_words
 
-        # Map each line to a beat time range
+        # Map each line to a time range based on word count
         lyrics_to_beats = []
-        for i in range(num_lines):
-            start_time = beat_times[i * beats_per_lyric] if i * beats_per_lyric < num_beats else beat_times[-1]
-            end_time = beat_times[(i + 1) * beats_per_lyric] if (i + 1) * beats_per_lyric < num_beats else beat_times[-1]
-            lyrics_to_beats.append((lyrics_lines[i], start_time, end_time))
+        current_time = 0
+        for line in lyrics_lines:
+            word_count = len(line.split())
+            line_duration = word_count * avg_duration_per_word
+            
+            # Ensure we don't exceed total duration
+            if current_time + line_duration > total_duration:
+                line_duration = total_duration - current_time
+            
+            end_time = current_time + line_duration
+            lyrics_to_beats.append((line, current_time, end_time))
+            current_time = end_time
 
         return lyrics_to_beats
     
     def sync_vocals_with_beats(self, beat_audio_path, lyrics_to_beats, vocal_files_dir):
-
         if not os.path.exists(beat_audio_path):
             print(f"File not found: {beat_audio_path}")
 
@@ -54,9 +61,17 @@ class AudioSync:
                 start_time_ms = int(start_time * 1000)
                 end_time_ms = int(end_time * 1000)
             
-                # Adjust vocal duration to match the beat segment
+                # Adjust vocal duration to match the time segment
                 duration_ms = end_time_ms - start_time_ms
                 vocal_audio = vocal_audio[:duration_ms]  # Trim if longer
+                
+                # Apply fade in/out for smoother transitions
+                fade_duration = min(200, duration_ms // 4)  # Longer fade for smoother transitions
+                vocal_audio = vocal_audio.fade_in(fade_duration).fade_out(fade_duration)
+                
+                # Apply volume adjustment to blend with music
+                vocal_audio = vocal_audio - 3  # Reduce volume by 3dB to blend better with music
+                
                 if len(vocal_audio) < duration_ms:
                     silence = AudioSegment.silent(duration=duration_ms - len(vocal_audio))
                     vocal_audio += silence  # Add silence if shorter
@@ -66,4 +81,7 @@ class AudioSync:
             else:
                 print(f"Vocal file {vocal_file_path} does not exist, skipping.")
     
+        # Mix the vocals with the original music
+        final_audio = beat_audio.overlay(final_audio)
+        
         return final_audio
