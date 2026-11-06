@@ -14,13 +14,21 @@ class MusicGenerator:
 
     def generate_music(self, text, length):
         self.load_model()
+        # Set better generation parameters
         self.model.set_generation_params(
             use_sampling=True,
             top_k=250,
-            duration=length)
+            top_p=0.95,  # Add top_p for better quality
+            temperature=1.0,  # Add temperature for more variety
+            duration=length,
+            cfg_coef=3.0  # Add classifier-free guidance for better control
+        )
 
+        # Add more context to the prompt
+        enhanced_prompt = f"Create a complete song with melody and rhythm about: {text}"
+        
         output = self.model.generate(
-            descriptions=[text],
+            descriptions=[enhanced_prompt],
             progress=True,
             return_tokens=True)
 

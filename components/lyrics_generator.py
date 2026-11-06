@@ -10,52 +10,39 @@ class LyricsGenerator:
     def load_model(self):
         if self.model is None:
             print("Loading lyrics generation model...")
-            # self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            # self.model  = AutoModelForCausalLM.from_pretrained(self.model_name).to(self.device)
-           
+
+    def clean_lyrics(self, lyrics):
+        # Remove structural markers like "Verse 1:", "Chorus:", etc.
+        lyrics = re.sub(r'(Verse|Chorus|Bridge|Pre-Chorus|Intro|Outro)\s*\d*:?\s*', '', lyrics)
+        # Remove any remaining numbers or special markers
+        lyrics = re.sub(r'^\d+\.\s*', '', lyrics, flags=re.MULTILINE)
+        # Remove empty lines
+        lyrics = '\n'.join(line for line in lyrics.split('\n') if line.strip())
+        return lyrics
 
     def generate_lyrics(self, text):
         self.load_model()
-        # Create prompt
-        # prompt = (f"Write a poetic song about love. Include verses, a catchy chorus, "
-        #       "and a heartfelt bridge. Use rhymes and emotional depth. Here’s an example of a song:\n\n"
-        #       "Verse: The stars above, they shine so bright,\n"
-        #       "Chorus: In your arms, I find my home,\n\n"
-        #       f"Now write a new song about love:\n\n")    
-        # # Encode the input
-        # input_ids = self.tokenizer(prompt, return_tensors="pt").input_ids.to(self.device)
-    
-        # # Generate lyrics
-        # output = self.model.generate(
-        #     input_ids,
-        #     max_length=150,
-        #     temperature=0,
-        #     top_p=0.9,
-        #     do_sample=True,
-        #     pad_token_id=self.tokenizer.eos_token_id
-        # )
-    
-        # # Decode and return the lyrics
-        # lyrics = self.tokenizer.decode(output[0], skip_special_tokens=True)
         client = OpenAI(base_url="https://models.inference.ai.azure.com",
                         api_key="key")
 
         completion = client.chat.completions.create(
-        model=self.model_name,
-        messages=[
-        {"role": "system", "content": "You are a song lyrics generator."},
-        {
-            "role": "user",
-            "content": "Write a song lyric about " + text
-        }
-        ]
+            model=self.model_name,
+            messages=[
+                {"role": "system", "content": "You are a song lyrics generator. Write lyrics without any structural markers like 'Verse', 'Chorus', etc. Just write the actual lyrics."},
+                {
+                    "role": "user",
+                    "content": f"Write song lyrics about {text}. Make it rhyme and have a good rhythm. Don't include any structural markers like 'Verse' or 'Chorus'."
+                }
+            ]
         )
-        return completion.choices[0].message.content
+        lyrics = completion.choices[0].message.content
+        return self.clean_lyrics(lyrics)
     
     def split_lyrics_into_lines(self, lyrics, max_line_length=50):
-        # Split by punctuation to get meaningful segments
-        raw_lines = re.split(r'[.,;!?]', lyrics)
+        # Split by newlines first
+        raw_lines = lyrics.split('\n')
         lyric_lines = []
+        
         for line in raw_lines:
             line = line.strip()
             if line:  # Skip empty lines
